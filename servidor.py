@@ -1,55 +1,51 @@
 from socket import *
+#importando o JSON -> necessário para transformar um vetor em String
 import json
 
-def products():
-    produtos = [
-        {"codigo": 1, "nome": "Celular", "preco_inicial": 200.0, "estoque": 20},
-        {"codigo": 2, "nome": "Tablet", "preco_inicial": 400.0, "estoque": 25},
-        {"codigo": 3, "nome": "Computador", "preco_inicial": 700.0, "estoque": 15}
-    ]
-    return produtos
-
-limite = 3
+#atribuindo o nome, a porta e o socket padrão para estabelecer conexão com o servidor
+serverName = 'localhost'
 serverPort = 12000
-servidor = socket(AF_INET,SOCK_STREAM)
-servidor.bind(('',serverPort))
-servidor.listen(1)
-print("Servidor online. Aguardando conexões...")
+cliente = socket(AF_INET, SOCK_STREAM)
+cliente.connect((serverName, serverPort))
 
-def conexao ():
-    produtos = products()
+#recebendo a lista de produtos do servidor sem formatação
+produtos = json.loads(cliente.recv(1024).decode())
+
+#estabelecendo um limite de interações (máx 3 ofertas)
+contador = 0
+limite = 3
+
+#função para receber a lista de produtos formatada e iniciar a negociação
+def negociacao():
     while True:
-        cliente, endereco = servidor.accept()
-        print("Conexão estabelecida com {}".format(endereco))
+        #formatação da lista de produtos
+        print("Lista de produtos:")
+        for produto in produtos:
+            print("Código: {} | Nome: {} | Preço Inicial: {} | Estoque Disponível: {}".format(produto["codigo"], produto["nome"], produto["preco_inicial"], produto["estoque"]))
 
-        cliente.send(json.dumps(produtos).encode())
+        codigo = int(input("Digite o código do produto que deseja comprar: "))
+        preco = float(input("Digite o preço que deseja pagar: "))
 
-        contador = 0
-        while True:
-            oferta = cliente.recv(1024).decode()
-            if not oferta:
-                break
+        #validando se o código escolhido pelo cliente está na lista de produtos
+        produto_valido = next((p for p in produtos if p["codigo"] == codigo), None)
+        if not produto_valido:
+            print("Código de produto inválido. Tente novamente.")
+            continue
+        
+        #oferta do cliente sendo enviada pelo JSON
+        oferta = {"codigo": codigo, "preco": preco}
+        cliente.send(json.dumps(oferta).encode())
 
-            oferta = json.loads(oferta)
-            produto = next(p for p in produtos if p["codigo"] == oferta["codigo"])
-            tab = "================================================================="
-            cliente.send(tab.encode())
-            if oferta["preco"] < (produto["preco_inicial"] - produto["preco_inicial"]*0.1):
-                resposta = "Oferta rejeitada. O valor está muito distante do preço inicial."
-            elif produto["estoque"] <= 0:
-                resposta = "Desculpe, não há mais estoque disponível deste produto."
-            else:
-                produto["estoque"] -= 1
-                resposta = "Oferta aceita! Você comprou um {} por {}".format(produto["nome"], oferta["preco"])
+        tab = cliente.recv(1024).decode()
+        print(tab)
+        resposta = cliente.recv(1024).decode()
+        print(resposta)
+        tab = cliente.recv(1024).decode()
+        print(tab)
 
-            cliente.send(resposta.encode())
-            cliente.send(tab.encode())
+        contador += 1
+        if contador >= limite:
+            print("Você atingiu o limite de compras. Saindo...")
+            break
 
-            contador += 1
-
-            if contador >= limite:
-                break
-
-        cliente.close()
-
-conexao()
+negociacao()
