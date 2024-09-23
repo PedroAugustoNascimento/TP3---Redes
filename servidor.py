@@ -1,70 +1,68 @@
 from socket import *
-# importando o JSON -> necessário para transformar um vetor em String
 import json
 
+#Criação de um vetor que contém 3 produtos disponíveis
+produtos = [
+    {"codigo": 1, "nome": "Celular", "preco_inicial": 200.0, "estoque": 20},
+    {"codigo": 2, "nome": "Tablet", "preco_inicial": 400.0, "estoque": 25},
+    {"codigo": 3, "nome": "Computador", "preco_inicial": 700.0, "estoque": 15}
+]
 
-# funcao para criar um dicionário de produtos (contendo código, nome, preço inicial e um estoque)
-def products():
-    produtos = [
-        {"codigo": 1, "nome": "Celular", "preco_inicial": 200.0, "estoque":5},
-        {"codigo": 2, "nome": "Tablet", "preco_inicial": 400.0, "estoque":10},
-        {"codigo": 3, "nome": "Computador", "preco_inicial": 700.0, "estoque":7}
-    ]
-    return produtos
-
-
-# atribuindo o nome, a porta e o socket padrão para estabelecer conexão com o servidor
+#Definindo limite de interações possíveis que o cliente poderá fazer
 limite = 3
 
+#Estabelecimento da conexão entre o servidor e o cliente
 serverPort = 12000
-servidor = socket(AF_INET, SOCK_STREAM)
-servidor.bind(('', serverPort))
+servidor = socket(AF_INET,SOCK_STREAM)
+servidor.bind(('',serverPort))
 servidor.listen(1)
 print("Servidor online. Aguardando conexões...")
 
+#Parte onde ocorre as interações ofertas e etc.
+while True:
+    cliente, endereco = servidor.accept()
+    print("Conexão estabelecida com {}".format(endereco))
 
-# funcao para estabelecer a conexão e realizar a interação com o cliente
-def conexao():
+    #Uso da biblioteca json para converter o vetor de produtos em uma string.
+    cliente.send(json.dumps(produtos).encode())
+
     contador = 0
-    produtos = products()
     while True:
-        # aceitando a conexão do clientes, retornando uma
-        # tupla da conexão realizada (a variavel endereco recebe o IP da máquina do cliente)
-        cliente, endereco = servidor.accept()
-        print("Conexão estabelecida com {}".format(endereco))
+        #Servidor recebe a oferta do cliente.
+        oferta = cliente.recv(1024).decode()
 
-        cliente.send(json.dumps(produtos).encode())
+        #Se não for uma oferta válida, a interação com o cliente é finalizada.
+        if not oferta:
+            break
 
-        while True:
-            # recebendo a oferta do cliente e, caso
-            # a oferta do cliente seja a mesma do preco_inicial, a proposta é aceita
-            oferta = cliente.recv(1024).decode()
-            if not oferta:
-                break
+        #Recebe a oferta e usa o json para receber a oferta e converte-la em uma string.
+        oferta = json.loads(oferta)
 
-            oferta = json.loads(oferta)
-            produto = next(p for p in produtos if p["codigo"] == oferta["codigo"])
+        #Verifica se existe algum produto com o código requerido.
+        produto = next(p for p in produtos if p["codigo"] == oferta["codigo"])
 
-            # o cálculo da oferta é feito por: se a oferta é maior que o
-            # preço inicial do produto - 10% do seu valor, a negociação
-            # é bem sucedida. Ex: Preço inicial: 400
-            # (a oferta só será aceita se o cliente oferecer um valor maior que 360)
+        #Apenas para formatação e melhorar o visual da resposta.
+        tab = "=================================================================================="
 
-            if oferta["preco"] < (produto["preco_inicial"] - produto["preco_inicial"] * 0.1):
-                resposta = "Oferta rejeitada. O valor está muito distante do preço inicial."
-            elif produto["estoque"] <= 0:
-                resposta = "Desculpe, não há mais estoque disponível deste produto."
-            else:
-                produto["estoque"] -= 1
-                resposta = "Oferta aceita! Você comprou um {} por {}".format(produto["nome"], oferta["preco"])
+        cliente.send(tab.encode())
 
-            cliente.send(resposta.encode())
+        #Se o preço ofertado pelo cliente for menor do que o preço inicial - 5% do preço inicial, a oferta é recusada e é sugerido um preço minimo para o cliente se basear.
+        if oferta["preco"] < (produto["preco_inicial"] - produto["preco_inicial"]*0.05):
+            resposta = "Oferta rejeitada. O valor está muito distante do preço inicial. Preço minimo sugerido: {}".format((produto["preco_inicial"] - produto["preco_inicial"]*0.05))
 
-            contador += 1
-            if contador >= limite:
-                break
+        elif produto["estoque"] <= 0: #Verifica se há estoque do produto.
+            resposta = "Desculpe, não há mais estoque disponível deste produto."
+
+        else:#Caso ocorra a compra de um item, é diminuido 1 do valor do estoque do produto.
+            produto["estoque"] -= 1
+            resposta = "Oferta aceita! Você comprou um {} por {}".format(produto["nome"], oferta["preco"])
+
+        #Envio da resposta para o cliente
+        cliente.send(resposta.encode())
+
+        #Controlando o limite de interações do usuário
+        contador += 1
+        if contador >= limite:
+            break
 
     cliente.close()
-
-
-conexao()
